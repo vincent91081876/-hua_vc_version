@@ -1,142 +1,233 @@
 :root {
-    --bg-color: #1a1a1d;
-    --primary-color: #4e4e50;
-    --secondary-color: #950740;
-    --accent-color: #c3073f;
-    --font-color: #f5f5f5;
-    --tile-color: #6f2232;
+    --board-size: 4; /* Default N for initial styling */
+    --tile-gap: 0.5vmin; /* Gap between tiles */
+    --tile-size: calc((100vmin - 10vmin - (var(--board-size) + 1) * var(--tile-gap)) / var(--board-size));
+    --font-size: calc(var(--tile-size) * 0.5);
 }
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--font-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f0f2f5;
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars from large boards */
+}
+
+.game-container {
+    background-color: #ffffff;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    padding: 3vmin;
+    text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 20px;
+    max-width: 95vw; /* Ensure it fits on smaller screens */
+    max-height: 95vh;
     box-sizing: border-box;
 }
 
 h1 {
-    color: var(--accent-color);
+    color: #333;
+    margin-bottom: 2vmin;
+    font-size: 4vmin;
 }
 
 .controls {
-    margin-bottom: 20px;
-}
-
-.controls input {
-    width: 60px;
-    padding: 8px;
-    background-color: var(--primary-color);
-    color: var(--font-color);
-    border: 1px solid var(--secondary-color);
-    border-radius: 5px;
-    text-align: center;
-}
-
-.controls button {
-    padding: 8px 15px;
-    font-size: 16px;
-    cursor: pointer;
-    background-color: var(--accent-color);
-    color: var(--font-color);
-    border: none;
-    border-radius: 5px;
-    transition: background-color 0.3s;
-}
-
-.controls button:hover {
-    background-color: var(--secondary-color);
-}
-
-.stats {
     display: flex;
-    justify-content: space-around;
-    width: 300px;
-    margin-bottom: 20px;
-    font-size: 1.2em;
-}
-
-#game-container {
-    position: relative;
-    /* 動態縮放的容器，確保遊戲盤在視窗內可見 */
-    max-width: 95vw;
-    max-height: 70vh;
-    display: flex;
-    align-items: center;
+    flex-wrap: wrap;
     justify-content: center;
-}
-
-
-#board {
-    /* 核心：使用 CSS Grid 和 CSS 變數實現動態縮放 */
-    display: grid;
-    grid-template-columns: repeat(var(--grid-size, 4), 1fr);
-    grid-template-rows: repeat(var(--grid-size, 4), 1fr);
-    gap: 5px;
-    padding: 10px;
-    background-color: var(--primary-color);
-    border-radius: 10px;
-    border: 3px solid var(--secondary-color);
-    position: relative;
-    /* 確保容器尺寸能正確縮放 */
-    aspect-ratio: 1 / 1;
+    gap: 1.5vmin;
+    margin-bottom: 2vmin;
     width: 100%;
 }
 
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5vmin;
+}
+
+.input-group label {
+    font-size: 2.2vmin;
+    color: #555;
+}
+
+.input-group input[type="number"] {
+    width: 8vmin;
+    padding: 1vmin;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 2.2vmin;
+    text-align: center;
+    -moz-appearance: textfield; /* Firefox */
+}
+
+.input-group input[type="number"]::-webkit-outer-spin-button,
+.input-group input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 1.2vmin 2.5vmin;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 2.2vmin;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+    white-space: nowrap; /* Prevent text wrapping */
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+.info-panel {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    margin-bottom: 2vmin;
+    background-color: #e9ecef;
+    padding: 1.5vmin;
+    border-radius: 10px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.info-item {
+    font-size: 2.5vmin;
+    color: #333;
+    display: flex;
+    gap: 1vmin;
+    align-items: center;
+}
+
+.info-item span:last-child {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.game-board {
+    display: grid;
+    /* Grid template columns/rows will be set by JS */
+    gap: var(--tile-gap);
+    background-color: #ced4da;
+    border-radius: 10px;
+    padding: var(--tile-gap);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+    /* Max width/height to ensure it scales down */
+    max-width: calc(100vmin - 6vmin); /* 95vw - 2*padding */
+    max-height: calc(100vmin - 6vmin);
+    aspect-ratio: 1 / 1; /* Keep it square */
+    box-sizing: border-box;
+}
+
 .tile {
-    /* 使用 var() 引用 JS 設定的尺寸 */
     width: var(--tile-size);
     height: var(--tile-size);
-    font-size: var(--font-size);
-    
-    background-color: var(--tile-color);
-    color: var(--font-color);
+    background-color: #6c757d;
+    color: white;
     display: flex;
     justify-content: center;
     align-items: center;
+    font-size: var(--font-size);
     font-weight: bold;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
-    user-select: none; /* 防止選取方塊內的文字 */
-    
-    /* 核心：動畫效果 */
-    position: absolute; /* 絕對定位是為了平滑移動 */
-    transition: top 0.2s ease-in-out, left 0.2s ease-in-out;
+    transition: transform 0.2s ease-out, background-color 0.2s ease;
+    user-select: none; /* Prevent text selection */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    position: relative; /* For positioning within grid */
+    box-sizing: border-box;
 }
 
 .tile.empty {
     background-color: transparent;
+    box-shadow: none;
     cursor: default;
 }
 
-#win-message {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.75);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    border-radius: 10px;
-    color: #fff;
-    z-index: 10;
+.tile:not(.empty):hover {
+    background-color: #495057;
 }
 
-#win-message h2 {
-    color: #4caf50;
-    font-size: 2.5em;
-    margin: 0;
+.win-message {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 123, 255, 0.95);
+    color: white;
+    padding: 4vmin 6vmin;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    font-size: 4vmin;
+    font-weight: bold;
+    text-align: center;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 2vmin;
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+.win-message button {
+    background-color: #28a745;
+    font-size: 2.5vmin;
+    padding: 1.5vmin 3vmin;
+}
+
+.win-message button:hover {
+    background-color: #218838;
 }
 
 .hidden {
-    display: none !important;
+    display: none;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 5vmin;
+    }
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .input-group {
+        justify-content: center;
+    }
+    button {
+        width: 100%;
+        padding: 2vmin;
+        font-size: 3vmin;
+    }
+    .info-panel {
+        flex-direction: column;
+        gap: 1vmin;
+    }
+    .info-item {
+        font-size: 3vmin;
+    }
+    .win-message {
+        font-size: 5vmin;
+        padding: 5vmin 7vmin;
+    }
+    .win-message button {
+        font-size: 3.5vmin;
+    }
 }
