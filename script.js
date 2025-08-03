@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let board = [];
     let N = 4; // Default board size
-    let emptyTilePos = { row: 0, col: 0 };
+    let emptyTilePos = { row: 0, col: 0 }; // Will be updated by generateSolvableBoard
     let moveCount = 0;
     let timerInterval = null;
     let startTime = 0;
@@ -29,74 +29,171 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Set CSS variables for dynamic sizing
         document.documentElement.style.setProperty('--board-size', N);
-        // Recalculate tile size based on new N
-        // This is handled by CSS using vmin, but explicitly setting it here ensures consistency
-        // For more precise control, one might calculate and set --tile-size directly in JS
-        // For now, relying on CSS's vmin and calc() is sufficient for responsiveness.
 
-        generateSolvableBoard();
+        generateSolvableBoard(); // 使用新的生成邏輯
         renderBoard();
     }
 
+    /**
+     * 生成一個可解的盤面。
+     * 方法是從一個已解的盤面開始，然後執行一系列隨機但合法的移動來打亂它。
+     */
     function generateSolvableBoard() {
         const totalTiles = N * N;
-        let tiles = Array.from({ length: totalTiles - 1 }, (_, i) => i + 1);
-        tiles.push(0); // 0 represents the empty tile
-
-        let shuffledTiles;
-        do {
-            shuffledTiles = shuffleArray(tiles.slice());
-        } while (!isSolvable(shuffledTiles));
-
+        // 1. 從一個已解的盤面開始 (1, 2, ..., N*N-1, 0)
         board = [];
-        let k = 0;
+        let k = 1;
         for (let i = 0; i < N; i++) {
             board[i] = [];
             for (let j = 0; j < N; j++) {
-                board[i][j] = shuffledTiles[k];
-                if (shuffledTiles[k] === 0) {
-                    emptyTilePos = { row: i, col: j };
-                }
+                board[i][j] = k % totalTiles; // 1 到 N*N-1，最後一個是 0 (空格)
                 k++;
             }
         }
-    }
+        emptyTilePos = { row: N - 1, col: N - 1 }; // 空格初始在右下角
 
-    // Fisher-Yates (Knuth) shuffle
-    function shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
+        // 2. 執行隨機合法移動來打亂盤面
+        // 移動次數與 N 的立方成正比，以確保足夠的隨機性，同時避免過度耗時
+        const numShuffles = N * N * N * 2; // 增加因子以確保更徹底的打亂
+        let prevEmptyPosForReversalCheck = { ...emptyTilePos }; // 記錄上一步空格的位置，用於避免立即反轉
+
+        for (let i = 0; i < numShuffles; i++) {
+            const possibleMoves = getValidMovesForShuffling(board, emptyTilePos, prevEmptyPosForReversalCheck);
+
+            if (possibleMoves.length === 0) {
+                // 理論上對於 N >= 2 的盤面不應該發生，除非邏輯有誤
+                console.warn("打亂過程中沒有可行的移動，提前結束。");
+                break;
+            }
+
+            const randomMoveIndex = Math.floor(Math.random() * possibleMoves.length);
+            const { row: clickedRow, col: clickedCol } = possibleMoves[randomMoveIndex];
+
+            // 在執行移動前，記錄當前空格的位置，作為下一次循環的 `prevEmptyPosForReversalCheck`
+            prevEmptyPosForReversalCheck = { ...emptyTilePos };
+
+            // 應用移動到盤面狀態 (不涉及 DOM 操作)
+            const { newBoard, newEmptyPos } = applyMoveToBoardState(board, emptyTilePos, clickedRow, clickedCol);
+            board = newBoard;
+            emptyTilePos = newEmptyPos;
         }
-        return array;
     }
 
-    // Check if the puzzle is solvable (standard 15-puzzle solvability)
-    // For N x N puzzle:
-    // If N is odd, number of inversions must be even.
-    // If N is even, (number of inversions + row of empty tile from bottom) must be even.
-    function isSolvable(tilesArray) {
-        const flatTiles = tilesArray.filter(val => val !== 0); // Exclude empty tile for inversion count
-        let inversions = 0;
-        for (let i = 0; i < flatTiles.length - 1; i++) {
-            for (let j = i + 1; j < flatTiles.length; j++) {
-                if (flatTiles[i] > flatTiles[j]) {
-                    inversions++;
+    /**
+     * 獲取當前盤面所有合法的移動選項，並避免立即反轉上一步操作。
+     * @param {Array<Array<number>>} currentBoard 當前盤面狀態
+     * @param {{row: number, col: number}} currentEmptyPos 當前空格位置
+     * @param {{row: number, col: number}} emptyPosBeforeLastMove 上一步移動前空格的位置 (用於避免反轉)
+     * @returns {Array<{row: number, col: number}>} 可點擊的方塊座標列表
+     */
+    function getValidMovesForShuffling(currentBoard, currentEmptyPos, emptyPosBeforeLastMove) {
+        const moves = [];
+        const emptyRow = currentEmptyPos.row;
+        const emptyCol = currentEmptyPos.col;
+
+        // 檢查同行可移動的方塊
+        for (let c = 0; c < N; c++) {
+            if (c !== emptyCol) { // 排除空格本身
+                const clickedTileRow = emptyRow;
+                const clickedTileCol = c;
+
+                // 判斷此移動是否會將空格移回上一步的位置 (即反轉)
+                // 空格總是移動到被點擊方塊的原始位置
+                if (!(clickedTileRow === emptyPosBeforeLastMove.row && clickedTileCol === emptyPosBeforeLastMove.col)) {
+                    moves.push({ row: clickedTileRow, col: clickedTileCol });
                 }
             }
         }
 
-        const emptyRowFromBottom = N - emptyTilePos.row; // 1-indexed from bottom
+        // 檢查同列可移動的方塊
+        for (let r = 0; r < N; r++) {
+            if (r !== emptyRow) { // 排除空格本身
+                const clickedTileRow = r;
+                const clickedTileCol = emptyCol;
 
-        if (N % 2 === 1) { // Odd grid
-            return inversions % 2 === 0;
-        } else { // Even grid
-            return (inversions + emptyRowFromBottom) % 2 === 0;
+                // 判斷此移動是否會將空格移回上一步的位置 (即反轉)
+                if (!(clickedTileRow === emptyPosBeforeLastMove.row && clickedTileCol === emptyPosBeforeLastMove.col)) {
+                    moves.push({ row: clickedTileRow, col: clickedTileCol });
+                }
+            }
         }
+        return moves;
+    }
+
+    /**
+     * 應用一次移動到盤面狀態，並返回新的盤面和空格位置。
+     * 此函數不修改傳入的 `currentBoard`，而是返回一個新的盤面副本。
+     * @param {Array<Array<number>>} currentBoard 當前盤面狀態
+     * @param {{row: number, col: number}} currentEmptyPos 當前空格位置
+     * @param {number} clickedRow 被點擊方塊的行
+     * @param {number} clickedCol 被點擊方塊的列
+     * @returns {{newBoard: Array<Array<number>>, newEmptyPos: {row: number, col: number}}} 新的盤面狀態和空格位置
+     */
+    function applyMoveToBoardState(currentBoard, currentEmptyPos, clickedRow, clickedCol) {
+        const newBoard = currentBoard.map(row => [...row]); // 創建盤面的深層副本
+        const newEmptyPos = { row: clickedRow, col: clickedCol }; // 被點擊方塊的原始位置將成為新的空格
+
+        const isSameRow = clickedRow === currentEmptyPos.row;
+        // const isSameCol = clickedCol === currentEmptyPos.col; // 如果不同行，則必然同列
+
+        let tilesToMove = [];
+        if (isSameRow) {
+            // 水平移動
+            const startCol = Math.min(clickedCol, currentEmptyPos.col);
+            const endCol = Math.max(clickedCol, currentEmptyPos.col);
+            for (let c = startCol; c <= endCol; c++) {
+                tilesToMove.push({ row: clickedRow, col: c, value: newBoard[clickedRow][c] });
+            }
+        } else { // isSameCol
+            // 垂直移動
+            const startRow = Math.min(clickedRow, currentEmptyPos.row);
+            const endRow = Math.max(clickedRow, currentEmptyPos.row);
+            for (let r = startRow; r <= endRow; r++) {
+                tilesToMove.push({ row: r, col: clickedCol, value: newBoard[r][clickedCol] });
+            }
+        }
+
+        const originalEmptyValue = newBoard[currentEmptyPos.row][currentEmptyPos.col]; // 應該是 0
+
+        if (isSameRow) {
+            if (clickedCol < currentEmptyPos.col) { // 點擊方塊在空格左側，向右移動
+                for (let i = tilesToMove.length - 1; i > 0; i--) {
+                    const current = tilesToMove[i];
+                    const prev = tilesToMove[i - 1];
+                    newBoard[current.row][current.col] = prev.value;
+                }
+                newBoard[clickedRow][clickedCol] = originalEmptyValue; // 被點擊方塊的位置變為空格
+            } else { // 點擊方塊在空格右側，向左移動
+                for (let i = 0; i < tilesToMove.length - 1; i++) {
+                    const current = tilesToMove[i];
+                    const next = tilesToMove[i + 1];
+                    newBoard[current.row][current.col] = next.value;
+                }
+                newBoard[clickedRow][clickedCol] = originalEmptyValue; // 被點擊方塊的位置變為空格
+            }
+        } else { // isSameCol
+            if (clickedRow < currentEmptyPos.row) { // 點擊方塊在空格上方，向下移動
+                for (let i = tilesToMove.length - 1; i > 0; i--) {
+                    const current = tilesToMove[i];
+                    const prev = tilesToMove[i - 1];
+                    newBoard[current.row][current.col] = prev.value;
+                }
+                newBoard[clickedRow][clickedCol] = originalEmptyValue; // 被點擊方塊的位置變為空格
+            } else { // 點擊方塊在空格下方，向上移動
+                for (let i = 0; i < tilesToMove.length - 1; i++) {
+                    const current = tilesToMove[i];
+                    const next = tilesToMove[i + 1];
+                    newBoard[current.row][current.col] = next.value;
+                }
+                newBoard[clickedRow][clickedCol] = originalEmptyValue; // 被點擊方塊的位置變為空格
+            }
+        }
+
+        return { newBoard, newEmptyPos };
     }
 
     function renderBoard() {
-        gameBoard.innerHTML = ''; // Clear existing tiles
+        gameBoard.innerHTML = ''; // 清除現有方塊
         gameBoard.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
         gameBoard.style.gridTemplateRows = `repeat(${N}, 1fr)`;
 
@@ -107,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tile.classList.add('tile');
                 tile.dataset.row = r;
                 tile.dataset.col = c;
-                tile.dataset.value = tileValue;
+                tile.dataset.value = tileValue; // 使用 data-value 屬性來唯一識別方塊
 
                 if (tileValue === 0) {
                     tile.classList.add('empty');
@@ -118,32 +215,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 gameBoard.appendChild(tile);
             }
         }
-        // Re-attach event listeners to new tiles
+        // 重新為新生成的方塊附加事件監聽器
         attachTileEventListeners();
     }
 
     function attachTileEventListeners() {
         document.querySelectorAll('.tile:not(.empty)').forEach(tile => {
-            tile.removeEventListener('click', handleTileClick); // Prevent duplicate listeners
+            tile.removeEventListener('click', handleTileClick); // 防止重複綁定
             tile.addEventListener('click', handleTileClick);
         });
     }
 
-    // --- Game Logic (Movement) ---
+    // --- 遊戲邏輯 (移動) ---
 
     function handleTileClick(event) {
-        if (winMessage.classList.contains('hidden') === false) return; // Don't allow moves if win message is up
+        if (winMessage.classList.contains('hidden') === false) return; // 勝利訊息顯示時不允許移動
 
         const clickedTile = event.target;
         const clickedRow = parseInt(clickedTile.dataset.row);
         const clickedCol = parseInt(clickedTile.dataset.col);
 
-        // Check if clicked tile is in the same row or column as the empty tile
+        // 檢查點擊的方塊是否與空格在同一行或同一列
         const isSameRow = clickedRow === emptyTilePos.row;
         const isSameCol = clickedCol === emptyTilePos.col;
 
         if (!isSameRow && !isSameCol) {
-            return; // Not a valid move
+            return; // 非法移動
         }
 
         if (!gameStarted) {
@@ -151,67 +248,13 @@ document.addEventListener('DOMContentLoaded', () => {
             gameStarted = true;
         }
 
-        let tilesToMove = [];
-        if (isSameRow) {
-            // Horizontal movement
-            const startCol = Math.min(clickedCol, emptyTilePos.col);
-            const endCol = Math.max(clickedCol, emptyTilePos.col);
-            for (let c = startCol; c <= endCol; c++) {
-                tilesToMove.push({ row: clickedRow, col: c, value: board[clickedRow][c] });
-            }
-        } else { // isSameCol
-            // Vertical movement
-            const startRow = Math.min(clickedRow, emptyTilePos.row);
-            const endRow = Math.max(clickedRow, emptyTilePos.row);
-            for (let r = startRow; r <= endRow; r++) {
-                tilesToMove.push({ row: r, col: clickedCol, value: board[r][clickedCol] });
-            }
-        }
-
-        // Perform the segment shift
-        const newBoard = board.map(row => [...row]); // Create a deep copy
-        const originalEmptyValue = newBoard[emptyTilePos.row][emptyTilePos.col]; // Should be 0
-
-        if (isSameRow) {
-            if (clickedCol < emptyTilePos.col) { // Clicked left of empty, shift right
-                for (let i = tilesToMove.length - 1; i > 0; i--) {
-                    const current = tilesToMove[i];
-                    const prev = tilesToMove[i - 1];
-                    newBoard[current.row][current.col] = prev.value;
-                }
-                newBoard[clickedRow][clickedCol] = originalEmptyValue; // Clicked tile becomes empty
-            } else { // Clicked right of empty, shift left
-                for (let i = 0; i < tilesToMove.length - 1; i++) {
-                    const current = tilesToMove[i];
-                    const next = tilesToMove[i + 1];
-                    newBoard[current.row][current.col] = next.value;
-                }
-                newBoard[clickedRow][clickedCol] = originalEmptyValue; // Clicked tile becomes empty
-            }
-        } else { // isSameCol
-            if (clickedRow < emptyTilePos.row) { // Clicked above empty, shift down
-                for (let i = tilesToMove.length - 1; i > 0; i--) {
-                    const current = tilesToMove[i];
-                    const prev = tilesToMove[i - 1];
-                    newBoard[current.row][current.col] = prev.value;
-                }
-                newBoard[clickedRow][clickedCol] = originalEmptyValue; // Clicked tile becomes empty
-            } else { // Clicked below empty, shift up
-                for (let i = 0; i < tilesToMove.length - 1; i++) {
-                    const current = tilesToMove[i];
-                    const next = tilesToMove[i + 1];
-                    newBoard[current.row][current.col] = next.value;
-                }
-                newBoard[clickedRow][clickedCol] = originalEmptyValue; // Clicked tile becomes empty
-            }
-        }
-
-        // Update the board and empty tile position
+        // 使用 applyMoveToBoardState 函數來更新全局的 board 和 emptyTilePos
+        const { newBoard, newEmptyPos } = applyMoveToBoardState(board, emptyTilePos, clickedRow, clickedCol);
         board = newBoard;
-        emptyTilePos = { row: clickedRow, col: clickedCol };
+        emptyTilePos = newEmptyPos;
 
         updateMoveCount(1);
-        updateTilePositions(); // Update DOM positions for animation
+        updateTilePositions(); // 更新 DOM 元素位置以觸發動畫
         checkWinCondition();
     }
 
@@ -219,17 +262,18 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let r = 0; r < N; r++) {
             for (let c = 0; c < N; c++) {
                 const tileValue = board[r][c];
+                // 透過 data-value 找到對應的 DOM 元素，因為其在 DOM 中的位置可能尚未更新
                 const tileElement = document.querySelector(`.tile[data-value="${tileValue}"]`);
                 if (tileElement) {
-                    // Update data attributes for future clicks
+                    // 更新 data 屬性，以便下次點擊時能獲取正確的邏輯位置
                     tileElement.dataset.row = r;
                     tileElement.dataset.col = c;
 
-                    // Use CSS Grid properties for positioning and animation
+                    // 使用 CSS Grid 屬性來定位和觸發動畫
                     tileElement.style.gridRowStart = r + 1;
                     tileElement.style.gridColumnStart = c + 1;
 
-                    // Ensure empty tile has correct class
+                    // 確保空格方塊有正確的 class
                     if (tileValue === 0) {
                         tileElement.classList.add('empty');
                     } else {
@@ -240,7 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Counters and Win Condition ---
+    // --- 計數器與勝利條件 ---
 
     function updateMoveCount(increment = 0) {
         moveCount += increment;
@@ -276,7 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let expectedValue = 1;
         for (let r = 0; r < N; r++) {
             for (let c = 0; c < N; c++) {
-                if (expectedValue === N * N) { // Last tile should be empty
+                if (expectedValue === N * N) { // 最後一個方塊應該是空格 (值為 0)
                     if (board[r][c] !== 0) {
                         correct = false;
                         break;
@@ -299,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Event Listeners ---
+    // --- 事件監聽器 ---
 
     generateGameBtn.addEventListener('click', () => {
         const newSize = parseInt(boardSizeInput.value);
@@ -311,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     resetGameBtn.addEventListener('click', () => {
-        // Re-shuffle current board size
+        // 重新打亂當前尺寸的盤面
         initializeGame(N);
     });
 
@@ -319,6 +363,6 @@ document.addEventListener('DOMContentLoaded', () => {
         winMessage.classList.add('hidden');
     });
 
-    // Initial game setup
+    // 初始遊戲設定
     initializeGame(N);
 });
